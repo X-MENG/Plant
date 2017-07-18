@@ -1,0 +1,12 @@
+{
+	"formula":"a_r",
+	"repeat_count":4,
+	"type":"seq",
+	"rule":
+	[
+		["a_r","a_l b_r"],
+		["a_l","b_l a_r"],
+		["b_r","a_r"],
+		["b_l","a_l"],
+	],
+}

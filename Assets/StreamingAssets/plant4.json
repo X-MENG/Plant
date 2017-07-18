@@ -1,0 +1,10 @@
+{
+	"formula":"b a a a a a a a a",
+	"repeat_count":4,
+	"type":"seq",
+	"rule":
+	[
+		["b < a","b"],
+		["b","a"],
+	],
+}

@@ -1,0 +1,10 @@
+{
+	"formula":"Fa [ + Fa ] Fa [ - Fa ] Fa [ + Fa ] Fb",
+	"ignore":"+ -",
+	"repeat_count":3,
+	"type":"seq",
+	"rule":
+	[
+		["Fa > Fb","Fb"]
+	],
+}

@@ -1,0 +1,14 @@
+{
+	"formula":"X F_u F_a X",
+	"repeat_count":4,
+	"type":"seq",
+	"rule":
+	[
+		["F_u < F_a > F_a","F_u"],
+		["F_u < F_a > X","F_d F_a"],
+		["F_a < F_a > F_d","F_d"],
+		["X < F_a > F_d","F_u"],
+		["F_u","F_a"],
+		["F_d","F_a"],
+	],
+}

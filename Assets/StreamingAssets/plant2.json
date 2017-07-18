@@ -1,0 +1,10 @@
+{
+	"formula":"F - F - F",
+	"repeat_count":1,
+	"turn_angle":90,
+	"type":"seq",
+	"rule":
+	[
+		["F","F + F F - F F - F - F + F + F F - F - F + F + F F + F F - F"],
+	],
+}

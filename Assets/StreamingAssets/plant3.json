@@ -1,0 +1,13 @@
+{
+	"formula":"F",
+	"repeat_count":5,
+	"turn_angle":90,
+	"type":"rand",
+	"prob":[0 33, 0 33, 0 34],
+	"rule":
+	[
+		["F","F [ + F ] F [ - F ] F"],
+		["F","F [ + F ] F"],
+		["F","F [ - F ] F"],
+	],
+}
