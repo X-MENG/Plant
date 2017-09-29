@@ -15,6 +15,7 @@ public enum FormulaType
     FT_STR,     // 字符串
     FT_EXP,     // 表达式
     FT_FUN,     // 函数
+    FT_CONTEXT, // 有上下文
 }
 
 public class FormulaFunc
@@ -24,6 +25,8 @@ public class FormulaFunc
         FuncName = "";
         Type = FormulaType.FT_NUM;
         args = new List<string>();
+        PrevFunc = null;
+        NextFunc = null;
     }
 
     public int GetArgIndex(string arg)
@@ -67,6 +70,8 @@ public class FormulaFunc
     public string FuncName;
     public FormulaType Type;
     public List<string> args;
+    public FormulaFunc PrevFunc;
+    public FormulaFunc NextFunc;
 }
 
 public class FormulaNode
@@ -147,6 +152,17 @@ public class PlantParser
             mTurnAngle = float.Parse(mPlantCfg["turn_angle"].ToString());
         }
 
+        mDefine = new Dictionary<string, string>();
+        if (mPlantCfg.ContainsKey("define") == true)
+        {
+            Dictionary<string, object> defineList = mPlantCfg["define"] as Dictionary<string, object>;
+            foreach (KeyValuePair<string, object> kv in defineList)
+            {
+                // TODO: 如果有表达式，则需要计算
+                mDefine.Add(kv.Key, kv.Value.ToString());
+            }
+        }
+
         mProb = new List<object>();
         if (mPlantCfg.ContainsKey("prob") == true)
         {
@@ -159,10 +175,17 @@ public class PlantParser
             List<object> ruleList = mPlantCfg["rule"] as List<object>;
             foreach (List<object> item in ruleList)
             {
-                RulePair rp = new RulePair(item[0].ToString(), item[1].ToString());
+                string key = item[0].ToString();
+                string value = item[1].ToString();
+
+                key = ReplaceDefineStrInFormula(key);
+                value = ReplaceDefineStrInFormula(value);
+                RulePair rp = new RulePair(key, value);
                 mRule.Add(rp);
             }
         }
+
+        mFormula = ReplaceDefineStrInFormula(mFormula);
 
         if(mType == "seq")
         {
@@ -182,12 +205,57 @@ public class PlantParser
         }
     }
 
-    private bool CalcCondition(FormulaFunc formulaFunc, FormulaFunc ruleFunc, string condStr)
+    private string ReplaceDefineStrInFormula(string str)
+    {
+        foreach(KeyValuePair<string, string> kv in mDefine)
+        {
+            str = str.Replace(kv.Key, kv.Value);
+        }
+
+        return str;
+    }
+
+    private bool CalcCondition(FormulaFunc formulaFunc, List<FormulaNode> formulaList, int idx, FormulaFunc ruleFunc, string condStr)
     {
         string[] condArr = condStr.Split(' ');
 
         bool result = true;
         CondOp curOP = CondOp.AND;
+
+        // 有上下文则先判断上下文
+        if(ruleFunc.PrevFunc != null)
+        {
+            if(idx - 1 >= 0)
+            {
+                FormulaNode prevNode = formulaList[idx - 1];
+                FormulaFunc prevFormulaFunc = MakeFunByStr(prevNode.Node);
+                if(prevFormulaFunc.FuncName != ruleFunc.PrevFunc.FuncName || prevFormulaFunc.args.Count != ruleFunc.PrevFunc.args.Count)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        if(ruleFunc.NextFunc != null)
+        {
+            if(idx + 1 < formulaList.Count)
+            {
+                FormulaNode nextNode = formulaList[idx + 1];
+                FormulaFunc nextFormulaFunc = MakeFunByStr(nextNode.Node);
+                if(nextFormulaFunc.FuncName != ruleFunc.NextFunc.FuncName || nextFormulaFunc.args.Count != ruleFunc.NextFunc.args.Count)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
 
         for(int i = 0; i < condArr.Length; ++i)
         {
@@ -295,6 +363,46 @@ public class PlantParser
     private FormulaFunc MakeFunByStr(string funStr)
     {
         FormulaFunc funType = new FormulaFunc();
+
+        bool hasPrev = false;
+        bool hasNext = false;
+        if(funStr.Contains("<") == true)
+        {
+            // 有前驱
+            string[] prev_splited = funStr.Split('<');
+            string prev = prev_splited[0];
+            prev = prev.Trim();
+            funType.PrevFunc = MakeFunByStr(prev);
+            hasPrev = true;
+        }
+
+        if(funStr.Contains(">") == true)
+        {
+            string[] next_splited = funStr.Split('>');
+            string next = next_splited[1];
+            next = next.Trim();
+            funType.NextFunc = MakeFunByStr(next);
+            hasNext = true;
+        }
+
+        char[] operators = { '<', '>' };
+
+        if (hasPrev == true && hasNext == true)
+        {
+            string[] splited = funStr.Split(operators);
+            funStr = splited[1].Trim();
+        }
+        else if(hasPrev == true)
+        {
+            string[] splited = funStr.Split(operators[0]);
+            funStr = splited[1].Trim();
+        }
+        else if(hasNext == true)
+        {
+            string[] splited = funStr.Split(operators[1]);
+            funStr = splited[0].Trim();
+        }
+
         string[] fun = funStr.Split(' ');
         funType.FuncName = fun[0];
         
@@ -340,8 +448,8 @@ public class PlantParser
         for(int i = 0; i < paramList.Length; ++i)
         {
             string[] ss = paramList[i].Split(' ');
-            string exp = BuildDotStr(ss);
-            funType.args.Add(ToPoExp(exp));
+            string exp = BuildNoSpaceStr(ss);
+            funType.args.Add(Util.ToPoExp(exp));
         }
 
         return funType;
@@ -567,7 +675,7 @@ public class PlantParser
         return nonDotStr;
     }
 
-    private string BuildDotStr(string[] strArr)
+    private string BuildNoSpaceStr(string[] strArr)
     {
         string retStr = "";
         for(int i = 0; i < strArr.Length; ++i)
@@ -589,11 +697,11 @@ public class PlantParser
         return retStr;
     }
 
-    private void DoReplaceFun(RulePair rp, List<FormulaNode> formulaList, int idx)
+    private bool DoReplaceFun(RulePair rp, List<FormulaNode> formulaList, int idx)
     {
         if(formulaList[idx].Replaced == true)
         {
-            return;
+            return false;
         }
 
         if (rp.Key.Contains(" ") == true)
@@ -603,17 +711,17 @@ public class PlantParser
             string ruleKeyCondStr = splitStr[1];
 
             string[] ruleKeyFuncArr = ruleKeyFunStr.Split(' ');
-            string ruleKeyFuncDotStr = BuildDotStr(ruleKeyFuncArr);
+            string ruleKeyFuncNoSpaceStr = BuildNoSpaceStr(ruleKeyFuncArr);
 
             FormulaFunc formulaFunc = MakeFunByStr(formulaList[idx].Node);
 
             // 解析函数
-            FormulaFunc ruleFunc = MakeFunByStr(ruleKeyFuncDotStr);
+            FormulaFunc ruleFunc = MakeFunByStr(ruleKeyFuncNoSpaceStr);
 
             // 解析条件
             string[] ruleKeyCondArr = ruleKeyCondStr.Split(' ');
-            string ruleKeyCondDotStr = BuildDotStr(ruleKeyCondArr);
-            if (formulaFunc.FuncName == ruleFunc.FuncName && CalcCondition(formulaFunc, ruleFunc, ruleKeyCondDotStr) == true)
+            string ruleKeyCondDotStr = BuildNoSpaceStr(ruleKeyCondArr);
+            if (formulaFunc.FuncName == ruleFunc.FuncName && formulaFunc.args.Count == ruleFunc.args.Count && CalcCondition(formulaFunc, formulaList, idx, ruleFunc, ruleKeyCondDotStr) == true)
             {
                 List<FormulaNode> ruleFormulaNodeList = CreateFormulaNodeList(rp.Value);
                 for (int i = 0; i < ruleFormulaNodeList.Count; ++i)
@@ -625,8 +733,12 @@ public class PlantParser
                     }
                 }
                 ReplaceFormulaFunNode(formulaList, idx, ruleFunc, ruleFormulaNodeList);
+
+                return true;
             }
         }
+
+        return false;
     }
 
     private void ReplaceFormulaFunNode(List<FormulaNode> formulaList, int i, FormulaFunc ruleFunc, List<FormulaNode> ruleFormulaNodeList)
@@ -683,7 +795,11 @@ public class PlantParser
         {
             if (formulaList[i].Type == FormulaType.FT_FUN)
             {
-                DoReplaceFun(rp, formulaList, i);
+                bool result = DoReplaceFun(rp, formulaList, i);
+                if(result == true)
+                {
+                    break;
+                }
             }
             else if(formulaList[i].Type == FormulaType.FT_STR)
             {
@@ -916,7 +1032,101 @@ public class PlantParser
         return ret;
     }
 
-    //private float CalcPoExp(FormulaFunc formulaFunc, FormulaFunc ruleFunc, string exp)
+    private bool CalcLogicPoExp(FormulaFunc formulaFunc, FormulaFunc ruleFunc, string logicPoExp)
+    {
+        string[] expArr = logicPoExp.Split(' ');
+        for(int i = 0; i < expArr.Length; ++i)
+        {
+            if(ExistInList(expArr[i], ruleFunc.args) == true)
+            {
+                expArr[i] = formulaFunc.args[i];
+            }
+        }
+
+        Stack<string> expStack = new Stack<string>();
+
+        // 求值
+        for(int i = 0; i < expArr.Length; ++i)
+        {
+            if (expStack.Count >= 2 
+                && (expArr[i] == ">" 
+                || expArr[i] == ">=" 
+                || expArr[i] == "==" 
+                || expArr[i] == "!="
+                || expArr[i] == "<"
+                || expArr[i] == "<="
+                || expArr[i] == "&&"
+                || expArr[i] == "||"))
+            {
+                string rightStr = expStack.Pop();
+                string leftStr = expStack.Pop();
+
+                if (expArr[i] == ">")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left > right).ToString());
+                }
+                else if (expArr[i] == ">=")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left >= right).ToString());
+                }
+                else if (expArr[i] == "==")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left == right).ToString());
+                }
+                else if (expArr[i] == "!=")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left != right).ToString());
+                }
+                else if (expArr[i] == "<")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left < right).ToString());
+                }
+                else if (expArr[i] == "<=")
+                {
+                    float right = float.Parse(rightStr);
+                    float left = float.Parse(leftStr);
+
+                    expStack.Push((left <= right).ToString());
+                }
+                else if (expArr[i] == "&&")
+                {
+                    bool right = bool.Parse(rightStr);
+                    bool left = bool.Parse(leftStr);
+
+                    expStack.Push((left && right).ToString());
+                }
+                else if (expArr[i] == "||")
+                {
+                    bool right = bool.Parse(rightStr);
+                    bool left = bool.Parse(leftStr);
+
+                    expStack.Push((left || right).ToString());
+                }
+            }
+            else
+            {
+                expStack.Push(expArr[i]);
+            }
+        }
+
+        return bool.Parse(expStack.Pop());
+    }
+
     private FormulaFunc CalcPoExp(FormulaFunc formulaFunc, FormulaFunc ruleFunc, FormulaFunc expFunc)
     {
         FormulaFunc resultFunc = new FormulaFunc();
@@ -975,107 +1185,6 @@ public class PlantParser
         return resultFunc;
     }
 
-    // TEST:"A.+.B.*.(.C.-.D.)./.E.+.F./.H"
-    private string ToPoExp(string exp)
-    {
-        string poExp = "";
-        List<string> poExpList = new List<string>();
-
-        string[] expArr = exp.Split(' ');
-        Stack<string> stack = new Stack<string>();
-
-        for(int i = 0; i < expArr.Length; ++i)
-        {
-            string c = expArr[i];
-            if (c == "+" || c == "-")
-            {
-                if (stack.Count == 0 || stack.Peek() == "(")
-                {
-                    stack.Push(c);
-                }
-                else
-                {
-                    while (stack.Count > 0
-                        && (stack.Peek() == "*"
-                        || stack.Peek() == "/"
-                        || stack.Peek() == "+"
-                        || stack.Peek() == "-"))
-                    {
-                        string s = stack.Pop();
-                        poExpList.Add(s);
-                        //Util.DBG(s);
-                    }
-
-                    stack.Push(c);
-                }
-            }
-            else if (c == "*" || c == "/")
-            {
-                if (stack.Count == 0 || stack.Peek() == "+" || stack.Peek() == "-" || stack.Peek() == "(")
-                {
-                    stack.Push(c);
-                }
-                else
-                {
-                    while (stack.Count > 0
-                        && (stack.Peek() == "/"
-                        || stack.Peek() == "*"))
-                    {
-                        string s = stack.Pop();
-                        poExpList.Add(s);
-                        //Util.DBG(s);
-                    }
-                    stack.Push(c);
-                }
-            }
-            else if(c == "(")
-            {
-                stack.Push(c);
-            }
-            else if(c == ")")
-            {
-                string t;
-                while((t = stack.Pop()) != "(")
-                {
-                    poExpList.Add(t);
-                    //Util.DBG(t);
-                }
-            }
-            else
-            {
-                poExpList.Add(c);
-                //Util.DBG(c);
-            }
-        }
-
-        if(stack.Count > 0)
-        {
-            while(stack.Count > 0)
-            {
-                string s = stack.Pop();
-                poExpList.Add(s);
-                //Util.DBG(s);
-            }
-        }
-
-        for(int i = 0; i < poExpList.Count; ++i)
-        {
-            if(poExp == "")
-            {
-                poExp = poExpList[i];
-            }
-            else
-            {
-                poExp += " ";
-                poExp += poExpList[i];
-            }
-        }
-
-        //Util.DBG("PoExp = " + poExp);
-
-        return poExp;
-    }
-
     private Dictionary<string, object> mPlantCfg;
     private int mRepeatCount;
     private string mType;
@@ -1084,4 +1193,5 @@ public class PlantParser
     private float mTurnAngle;
     private List<object> mProb;
     private List<string> mIgnoreList;
+    private Dictionary<string, string> mDefine;
 }

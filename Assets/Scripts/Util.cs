@@ -98,4 +98,215 @@ public class Util
 
         return 0;
     }
+
+    public static string ToPoLogicExp(string exp)
+    {
+        string poExp = "";
+        List<string> poExpList = new List<string>();
+
+        string[] expArr = exp.Split(' ');
+        Stack<string> stack = new Stack<string>();
+
+        for (int i = 0; i < expArr.Length; ++i)
+        {
+            string c = expArr[i];
+            if (c == ">"
+                || c == ">="
+                || c == "=="
+                || c == "!="
+                || c == "<"
+                || c == "<=")
+            {
+                if (stack.Count == 0 || stack.Peek() == "(")
+                {
+                    stack.Push(c);
+                }
+                else
+                {
+                    while (stack.Count > 0
+                        && (stack.Peek() == ">"
+                        || stack.Peek() == ">="
+                        || stack.Peek() == "=="
+                        || stack.Peek() == "!="
+                        || stack.Peek() == "<"
+                        || stack.Peek() == "<="
+                        || stack.Peek() == "&&"
+                        || stack.Peek() == "||"))
+                    {
+                        string s = stack.Pop();
+                        poExpList.Add(s);
+                    }
+
+                    stack.Push(c);
+                }
+            }
+            else if (c == "||" || c == "&&")
+            {
+                if (stack.Count == 0
+                    || stack.Peek() == ">"
+                    || stack.Peek() == ">="
+                    || stack.Peek() == "=="
+                    || stack.Peek() == "!="
+                    || stack.Peek() == "<"
+                    || stack.Peek() == "<="
+                    || stack.Peek() == "(")
+                {
+                    stack.Push(c);
+                }
+                else
+                {
+                    while (stack.Count > 0
+                        && (stack.Peek() == "||"
+                        || stack.Peek() == "&&"))
+                    {
+                        string s = stack.Pop();
+                        poExpList.Add(s);
+                        //Util.DBG(s);
+                    }
+                    stack.Push(c);
+                }
+            }
+            else if (c == "(")
+            {
+                stack.Push(c);
+            }
+            else if (c == ")")
+            {
+                string t;
+                while ((t = stack.Pop()) != "(")
+                {
+                    poExpList.Add(t);
+                }
+            }
+            else
+            {
+                poExpList.Add(c);
+            }
+        }
+
+        if (stack.Count > 0)
+        {
+            while (stack.Count > 0)
+            {
+                string s = stack.Pop();
+                poExpList.Add(s);
+            }
+        }
+
+        for (int i = 0; i < poExpList.Count; ++i)
+        {
+            if (poExp == "")
+            {
+                poExp = poExpList[i];
+            }
+            else
+            {
+                poExp += " ";
+                poExp += poExpList[i];
+            }
+        }
+
+        return poExp;
+    }
+
+    // TEST:"A.+.B.*.(.C.-.D.)./.E.+.F./.H"
+    public static string ToPoExp(string exp)
+    {
+        string poExp = "";
+        List<string> poExpList = new List<string>();
+
+        string[] expArr = exp.Split(' ');
+        Stack<string> stack = new Stack<string>();
+
+        for (int i = 0; i < expArr.Length; ++i)
+        {
+            string c = expArr[i];
+            if (c == "+" || c == "-")
+            {
+                if (stack.Count == 0 || stack.Peek() == "(")
+                {
+                    stack.Push(c);
+                }
+                else
+                {
+                    while (stack.Count > 0
+                        && (stack.Peek() == "*"
+                        || stack.Peek() == "/"
+                        || stack.Peek() == "+"
+                        || stack.Peek() == "-"))
+                    {
+                        string s = stack.Pop();
+                        poExpList.Add(s);
+                        //Util.DBG(s);
+                    }
+
+                    stack.Push(c);
+                }
+            }
+            else if (c == "*" || c == "/")
+            {
+                if (stack.Count == 0 || stack.Peek() == "+" || stack.Peek() == "-" || stack.Peek() == "(")
+                {
+                    stack.Push(c);
+                }
+                else
+                {
+                    while (stack.Count > 0
+                        && (stack.Peek() == "/"
+                        || stack.Peek() == "*"))
+                    {
+                        string s = stack.Pop();
+                        poExpList.Add(s);
+                        //Util.DBG(s);
+                    }
+                    stack.Push(c);
+                }
+            }
+            else if (c == "(")
+            {
+                stack.Push(c);
+            }
+            else if (c == ")")
+            {
+                string t;
+                while ((t = stack.Pop()) != "(")
+                {
+                    poExpList.Add(t);
+                    //Util.DBG(t);
+                }
+            }
+            else
+            {
+                poExpList.Add(c);
+                //Util.DBG(c);
+            }
+        }
+
+        if (stack.Count > 0)
+        {
+            while (stack.Count > 0)
+            {
+                string s = stack.Pop();
+                poExpList.Add(s);
+                //Util.DBG(s);
+            }
+        }
+
+        for (int i = 0; i < poExpList.Count; ++i)
+        {
+            if (poExp == "")
+            {
+                poExp = poExpList[i];
+            }
+            else
+            {
+                poExp += " ";
+                poExp += poExpList[i];
+            }
+        }
+
+        //Util.DBG("PoExp = " + poExp);
+
+        return poExp;
+    }
 }
