@@ -1,0 +1,16 @@
+{
+	"formula":"F ( 1 )",
+	"define":
+	{
+		"c":1,
+		"p":0.3,
+		"q":"c - p",
+		"h":"( p * q ) ^ 0.5"
+	},
+	"repeat_count":1,
+	"type":"seq",
+	"rule":
+	[
+		["F ( x ) : true","F ( x * p ) + F ( x * h ) - - F ( x * h ) + F ( x * q )"],
+	],
+}

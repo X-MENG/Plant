@@ -233,7 +233,8 @@ public class Util
                         && (stack.Peek() == "*"
                         || stack.Peek() == "/"
                         || stack.Peek() == "+"
-                        || stack.Peek() == "-"))
+                        || stack.Peek() == "-"
+                        || stack.Peek() == "^"))
                     {
                         string s = stack.Pop();
                         poExpList.Add(s);
@@ -243,7 +244,7 @@ public class Util
                     stack.Push(c);
                 }
             }
-            else if (c == "*" || c == "/")
+            else if (c == "*" || c == "/" || c == "^")
             {
                 if (stack.Count == 0 || stack.Peek() == "+" || stack.Peek() == "-" || stack.Peek() == "(")
                 {
@@ -253,7 +254,8 @@ public class Util
                 {
                     while (stack.Count > 0
                         && (stack.Peek() == "/"
-                        || stack.Peek() == "*"))
+                        || stack.Peek() == "*"
+                        || stack.Peek() == "^"))
                     {
                         string s = stack.Pop();
                         poExpList.Add(s);

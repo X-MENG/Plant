@@ -152,6 +152,7 @@ public class PlantParser
             mTurnAngle = float.Parse(mPlantCfg["turn_angle"].ToString());
         }
 
+        Dictionary<string, string> define = new Dictionary<string, string>();
         mDefine = new Dictionary<string, string>();
         if (mPlantCfg.ContainsKey("define") == true)
         {
@@ -159,7 +160,55 @@ public class PlantParser
             foreach (KeyValuePair<string, object> kv in defineList)
             {
                 // TODO: 如果有表达式，则需要计算
-                mDefine.Add(kv.Key, kv.Value.ToString());
+                string v = kv.Value.ToString();
+                define.Add(kv.Key, Util.ToPoExp(v));
+            }
+
+            foreach(KeyValuePair<string, string> kv in define)
+            {
+                Stack<float> expStack = new Stack<float>();
+                string[] expArr = kv.Value.Split(' ');
+                for (int i = 0; i < expArr.Length; ++i)
+                {
+                    if (expStack.Count >= 2 && (expArr[i] == "+" || expArr[i] == "-" || expArr[i] == "*" || expArr[i] == "/" || expArr[i] == "^"))
+                    {
+                        float right = expStack.Pop();
+                        float left = expStack.Pop();
+
+                        if (expArr[i] == "+")
+                        {
+                            expStack.Push(left + right);
+                        }
+                        else if (expArr[i] == "-")
+                        {
+                            expStack.Push(left - right);
+                        }
+                        else if (expArr[i] == "*")
+                        {
+                            expStack.Push(left * right);
+                        }
+                        else if (expArr[i] == "/")
+                        {
+                            expStack.Push(left / right);
+                        }
+                        else if (expArr[i] == "^")
+                        {
+                            expStack.Push(Mathf.Pow(left, right));
+                        }
+                    }
+                    else
+                    {
+                        if (mDefine.ContainsKey(expArr[i]) == true)
+                        {
+                            expStack.Push(float.Parse(mDefine[expArr[i]]));
+                        }
+                        else
+                        {
+                            expStack.Push(float.Parse(expArr[i]));
+                        }
+                    }
+                }
+                mDefine.Add(kv.Key, expStack.Pop().ToString());
             }
         }
 
@@ -257,110 +306,12 @@ public class PlantParser
             }
         }
 
-        for(int i = 0; i < condArr.Length; ++i)
-        {
-            int deepCount = 0;
-            if(condArr[i] == "(")
-            {
-                ++deepCount;
-            }
-            else if(condArr[i] == ")")
-            {
-                --deepCount;
-            }
-            else if(condArr[i] == "&")
-            {
-                curOP = CondOp.AND;
-            }
-            else if(condArr[i] == "|")
-            {
-                curOP = CondOp.OR;
-            }
-            else if(condArr[i] == "==" 
-                || condArr[i] == "!=" 
-                || condArr[i] == ">"
-                || condArr[i] == "<"
-                || condArr[i] == ">="
-                || condArr[i] == "<=")
-            {
-                string left  = condArr[i - 1];
-                float right = float.Parse(condArr[i + 1]);
-                int index = ruleFunc.GetArgIndex(left);
-                float param = float.Parse(formulaFunc.args[index]);
+        string poExp = Util.ToPoLogicExp(condStr);
 
-                if(condArr[i] == "==")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param == right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param == right);
-                    }
-                }
-                else if(condArr[i] == "!=")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param != right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param != right);
-                    }
-                }
-                else if(condArr[i] == ">")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param > right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param > right);
-                    }
-                }
-                else if(condArr[i] == "<")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param < right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param < right);
-                    }
-                }
-                else if(condArr[i] == ">=")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param >= right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param >= right);
-                    }
-                }
-                else if(condArr[i] == "<=")
-                {
-                    if(curOP == CondOp.AND)
-                    {
-                        result = result && (param <= right);
-                    }
-                    else if(curOP == CondOp.OR)
-                    {
-                        result = result || (param <= right);
-                    }
-                }
-            }
-        }
-
-        return result;
+        return CalcLogicPoExp(formulaFunc, ruleFunc, poExp);
     }
 
-    private FormulaFunc MakeFunByStr(string funStr)
+    private FormulaFunc MakeFunByStr(string funStr, bool toPoExp = true)
     {
         FormulaFunc funType = new FormulaFunc();
 
@@ -449,7 +400,14 @@ public class PlantParser
         {
             string[] ss = paramList[i].Split(' ');
             string exp = BuildNoSpaceStr(ss);
-            funType.args.Add(Util.ToPoExp(exp));
+            if (toPoExp == true)
+            {
+                funType.args.Add(Util.ToPoExp(exp));
+            }
+            else
+            {
+                funType.args.Add(exp);
+            }
         }
 
         return funType;
@@ -721,9 +679,10 @@ public class PlantParser
             // 解析条件
             string[] ruleKeyCondArr = ruleKeyCondStr.Split(' ');
             string ruleKeyCondDotStr = BuildNoSpaceStr(ruleKeyCondArr);
+
             if (formulaFunc.FuncName == ruleFunc.FuncName && formulaFunc.args.Count == ruleFunc.args.Count && CalcCondition(formulaFunc, formulaList, idx, ruleFunc, ruleKeyCondDotStr) == true)
             {
-                List<FormulaNode> ruleFormulaNodeList = CreateFormulaNodeList(rp.Value);
+                List<FormulaNode> ruleFormulaNodeList = CreateFormulaNodeList(rp.Value.Trim());
                 for (int i = 0; i < ruleFormulaNodeList.Count; ++i)
                 {
                     if (ruleFormulaNodeList[i].Type == FormulaType.FT_FUN)
@@ -756,7 +715,7 @@ public class PlantParser
             FormulaNode node = ruleFormulaNodeList[j];
             if(node.Type == FormulaType.FT_FUN)
             {
-                FormulaFunc valueFunc = MakeFunByStr(node.Node);
+                FormulaFunc valueFunc = MakeFunByStr(node.Node, false);
                 FormulaFunc resultFunc = CalcPoExp(formulaFunc, ruleFunc, valueFunc);
                 FormulaNode insertNode = new FormulaNode();
                 insertNode.Type = FormulaType.FT_FUN;
@@ -795,11 +754,7 @@ public class PlantParser
         {
             if (formulaList[i].Type == FormulaType.FT_FUN)
             {
-                bool result = DoReplaceFun(rp, formulaList, i);
-                if(result == true)
-                {
-                    break;
-                }
+                DoReplaceFun(rp, formulaList, i);
             }
             else if(formulaList[i].Type == FormulaType.FT_STR)
             {
@@ -1017,14 +972,14 @@ public class PlantParser
         ReplaceFormulaOnePass();
     }
 
-    private bool ExistInList(string s, List<string> lst)
+    private int ExistInList(string s, List<string> lst)
     {
-        bool ret = false;
+        int ret = -1;
         for(int i = 0; i < lst.Count; ++i)
         {
             if(lst[i] == s)
             {
-                ret = true;
+                ret = i;
                 break;
             }
         }
@@ -1037,9 +992,10 @@ public class PlantParser
         string[] expArr = logicPoExp.Split(' ');
         for(int i = 0; i < expArr.Length; ++i)
         {
-            if(ExistInList(expArr[i], ruleFunc.args) == true)
+            int argsIndex = ExistInList(expArr[i], ruleFunc.args);
+            if (argsIndex >= 0)
             {
-                expArr[i] = formulaFunc.args[i];
+                expArr[i] = formulaFunc.args[argsIndex];
             }
         }
 
@@ -1136,10 +1092,27 @@ public class PlantParser
             string[] expArr = expFunc.args[k].Split(' ');
             for (int i = 0; i < expArr.Length; ++i)
             {
-                if (ExistInList(expArr[i], ruleFunc.args) == true)
+                int argsIndex = ExistInList(expArr[i], ruleFunc.args);
+                if (argsIndex >= 0)
                 {
                     // 用值替换字符
-                    expArr[i] = formulaFunc.args[i];
+                    expArr[i] = formulaFunc.args[argsIndex];
+                }
+                else if(ruleFunc.PrevFunc != null)
+                {
+                    argsIndex = ExistInList(expArr[i], ruleFunc.PrevFunc.args);
+                    if(argsIndex >= 0)
+                    {
+                        expArr[i] = formulaFunc.args[argsIndex];
+                    }
+                    else if(ruleFunc.NextFunc != null)
+                    {
+                        argsIndex = ExistInList(expArr[i], ruleFunc.NextFunc.args);
+                        if(argsIndex >= 0)
+                        {
+                            expArr[i] = formulaFunc.args[argsIndex];
+                        }
+                    }
                 }
             }
 
@@ -1147,7 +1120,7 @@ public class PlantParser
             // 求值
             for (int i = 0; i < expArr.Length; ++i)
             {
-                if (expStack.Count >= 2 && (expArr[i] == "+" || expArr[i] == "-" || expArr[i] == "*" || expArr[i] == "/"))
+                if (expStack.Count >= 2 && (expArr[i] == "+" || expArr[i] == "-" || expArr[i] == "*" || expArr[i] == "/" || expArr[i] == "^"))
                 {
                     float right = expStack.Pop();
                     float left = expStack.Pop();
@@ -1167,6 +1140,10 @@ public class PlantParser
                     else if (expArr[i] == "/")
                     {
                         expStack.Push(left / right);
+                    }
+                    else if(expArr[i] == "^")
+                    {
+                        expStack.Push(Mathf.Pow(left, right));
                     }
                 }
                 else
